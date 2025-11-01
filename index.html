@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <style>
-    :root{--bg:#0b1020;--panel:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--warn:#f59e0b;--err:#ef4444;}
+    :root{--bg:#0b1020;--panel:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--warn:#f59e0b;--err:#ef4444}
     *{box-sizing:border-box}
-    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;color:var(--text);background:linear-gradient(160deg,#0b1020,#0f172a);} 
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;color:var(--text);background:linear-gradient(160deg,#0b1020,#0f172a)}
     header{position:sticky;top:0;background:rgba(17,24,39,.8);backdrop-filter: blur(8px);border-bottom:1px solid #1f2937;z-index:10}
     .wrap{max-width:1100px;margin:0 auto;padding:16px}
     h1{font-size:20px;margin:0}
@@ -30,11 +30,11 @@
     table{width:100%;border-collapse: collapse}
     th,td{padding:10px;border-bottom:1px solid #243145}
     th{text-align:left;color:#cbd5e1}
-    #video{width:100%;max-height:60vh;border-radius:14px;border:1px solid #23314a;background:#000}
+    #reader{width:100%;max-width:680px;border-radius:14px;border:1px solid #23314a;background:#000;min-height:260px}
     #status{font-weight:600;margin-top:8px}
     #qrGallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
     .qrCard{border:1px solid #243145;border-radius:12px;padding:10px;background:#0b1220}
-    input,select,textarea{background:#0b1220;border:1px solid #334155;border-radius:10px;color:var(--text);padding:8px;}
+    input,select,textarea{background:#0b1220;border:1px solid #334155;border-radius:10px;color:var(--text);padding:8px}
     label{display:inline-flex;flex-direction:column;gap:6px;margin:6px 10px 6px 0}
     .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
     .hide{display:none}
@@ -69,15 +69,23 @@
     <section id="tab-scan" class="grid" role="tabpanel" aria-labelledby="scan">
       <div class="card">
         <h3 style="margin-top:0">Escaneo con cámara</h3>
-        <video id="video" playsinline muted></video>
-        <div class="row" style="margin-top:10px">
+        <div id="reader"></div>
+        <div id="file-reader" class="hide"></div>
+        <div class="row" style="margin-top:10px;gap:10px">
           <button class="btn acc" id="startCam">▶️ Iniciar cámara</button>
           <button class="btn" id="stopCam">⏹️ Detener</button>
+          <label style="min-width:220px">Cámara
+            <select id="cameraSelect"></select>
+          </label>
           <span id="status" class="muted">Listo para iniciar. Se requiere HTTPS para acceso a cámara.</span>
         </div>
         <div class="row" style="margin-top:10px">
           <input type="file" id="file" accept="image/*">
           <span class="muted">O sube una foto con el QR</span>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn warn" id="btnTestOk">🧪 Simular QR válido</button>
+          <button class="btn err" id="btnTestBad">🧪 Simular QR inválido</button>
         </div>
       </div>
       <div class="card">
@@ -172,8 +180,8 @@
 
   <footer class="wrap muted">Hecho para funcionar 100% del lado del cliente · No requiere servidor</footer>
 
-  <!-- Librerías: ZXing para leer, qrcodejs para generar -->
-  <script src="https://unpkg.com/@zxing/library@0.20.0"></script>
+  <!-- Librerías: html5-qrcode para leer, qrcodejs para generar -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
     // ======= Utilidades de almacenamiento =======
@@ -243,49 +251,58 @@
       if(t.dataset.tab==='scan'){ renderToday() }
     }));
 
-    // ======= Escaneo con cámara (ZXing) =======
-    const video = document.getElementById('video');
+    // ======= Escaneo con cámara (html5-qrcode) =======
     const statusEl = document.getElementById('status');
     const startBtn = document.getElementById('startCam');
     const stopBtn = document.getElementById('stopCam');
     const fileInput = document.getElementById('file');
+    const cameraSelect = document.getElementById('cameraSelect');
 
-    let codeReader = null;
-    let currentStream = null;
-    let scanning = false;
+    let html5QrCode = null;
+    let running = false;
+
+    async function populateCameras(){
+      try{
+        const devices = await Html5Qrcode.getCameras();
+        cameraSelect.innerHTML = '';
+        if(!devices.length){ cameraSelect.innerHTML = '<option value="">(Sin cámaras)</option>'; return }
+        for(const d of devices){
+          const opt = document.createElement('option');
+          opt.value = d.id; opt.textContent = d.label || d.id; cameraSelect.append(opt);
+        }
+      }catch(e){ console.error(e); cameraSelect.innerHTML = '<option value="">(Error listando cámaras)</option>'; }
+    }
 
     async function startCamera(){
+      if(running) return;
       try{
-        if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
-        const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-        const back = devices.find(d=>/back|trás|rear|environment/i.test(d.label))?.deviceId || devices[0]?.deviceId;
-        if(!back){ statusEl.innerHTML = '⚠️ No hay cámaras disponibles'; return }
-        scanning = true;
-        statusEl.textContent = 'Abriendo cámara…';
-        await codeReader.decodeFromVideoDevice(back, video, (res, err, controls)=>{
-          if(res){
-            onQRCode(res.getText());
-          }
-          if(err && !(err instanceof ZXing.NotFoundException)){
-            console.warn(err);
-          }
-        });
+        if(!html5QrCode){ html5QrCode = new Html5Qrcode('reader', {formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]}); }
+        await populateCameras();
+        const camId = cameraSelect.value || (await Html5Qrcode.getCameras())[0]?.id;
+        if(!camId){ statusEl.innerHTML = '⚠️ No hay cámaras disponibles o falta HTTPS.'; return }
+        running = true;
+        statusEl.textContent = 'Cámara iniciada. Escaneando…';
+        await html5QrCode.start(
+          camId,
+          { fps: 10, qrbox: { width: 260, height: 260 } },
+          (decodedText, decodedResult)=> onQRCode(decodedText),
+          (errMsg)=>{ /* silencioso para no saturar UI */ }
+        );
       }catch(e){
         console.error(e);
-        statusEl.innerHTML = '⚠️ No se pudo acceder a la cámara. Asegúrate de usar HTTPS (o prueba subir una imagen).';
+        statusEl.innerHTML = '⚠️ No se pudo acceder a la cámara. Usa HTTPS o prueba con la subida de imagen.';
       }
     }
 
     async function stopCamera(){
       try{
-        scanning = false;
-        if(codeReader){ codeReader.reset(); }
-        if(video.srcObject){
-          video.srcObject.getTracks().forEach(t=> t.stop());
-          video.srcObject = null;
+        if(html5QrCode && running){
+          await html5QrCode.stop();
+          await html5QrCode.clear();
         }
-        statusEl.textContent = 'Cámara detenida.';
-      }catch(e){ console.error(e) }
+      }catch(e){ console.warn(e) }
+      running = false;
+      statusEl.textContent = 'Cámara detenida.';
     }
 
     startBtn.addEventListener('click', startCamera);
@@ -294,14 +311,13 @@
     // Escanear desde imagen subida
     fileInput.addEventListener('change', async (ev)=>{
       const file = ev.target.files?.[0]; if(!file) return;
-      const url = URL.createObjectURL(file);
       try{
-        if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
-        const res = await codeReader.decodeFromImageUrl(url);
-        if(res) onQRCode(res.getText());
-        else statusEl.innerHTML = '⚠️ No se detectó QR en la imagen';
-      }catch(e){ statusEl.innerHTML = '⚠️ Error al procesar imagen'; console.error(e) }
-      finally{ URL.revokeObjectURL(url) }
+        const fileQr = new Html5Qrcode('file-reader');
+        const result = await fileQr.scanFileV2(file, true);
+        if(result && result.decodedText){ onQRCode(result.decodedText) }
+        await fileQr.clear();
+      }catch(e){ statusEl.innerHTML = '⚠️ No se detectó QR en la imagen'; console.error(e) }
+      finally{ ev.target.value = '' }
     });
 
     function onQRCode(text){
@@ -430,11 +446,7 @@
       const lines = text.split(/\r?\n/).filter(Boolean);
       if(!lines.length) return [];
       const head = lines[0].split(',').map(s=> s.trim().toLowerCase());
-      const idx = {
-        id: head.indexOf('id_alumno'),
-        nom: head.indexOf('nombre'),
-        grp: head.indexOf('grupo')
-      };
+      const idx = { id: head.indexOf('id_alumno'), nom: head.indexOf('nombre'), grp: head.indexOf('grupo') };
       const out=[];
       for(let i=1;i<lines.length;i++){
         const cols = splitCSVLine(lines[i]);
@@ -454,6 +466,15 @@
       }
       res.push(cur); return res;
     }
+
+    // ======= Tests (casos de prueba) =======
+    document.getElementById('btnTestOk').addEventListener('click', ()=>{
+      const sample = { id_alumno: 'A001', nombre: 'María López', grupo: '3A' };
+      onQRCode(JSON.stringify(sample));
+    });
+    document.getElementById('btnTestBad').addEventListener('click', ()=>{
+      onQRCode('{"foo":1}');
+    });
 
     // ======= Helpers =======
     const esc = s => String(s).replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
