@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Asistencia con QR · Página única</title>
+  <meta name="theme-color" content="#111827" />
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <style>
+    :root{--bg:#0b1020;--panel:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--warn:#f59e0b;--err:#ef4444;}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;color:var(--text);background:linear-gradient(160deg,#0b1020,#0f172a);} 
+    header{position:sticky;top:0;background:rgba(17,24,39,.8);backdrop-filter: blur(8px);border-bottom:1px solid #1f2937;z-index:10}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    h1{font-size:20px;margin:0}
+    nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .tab{padding:8px 12px;border:1px solid #334155;border-radius:10px;background:#0b1220;color:#e5e7eb;cursor:pointer}
+    .tab[aria-selected="true"]{background:#0f1b33;border-color:#3b82f6}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media(min-width:900px){.grid{grid-template-columns:2fr 1fr}}
+    .card{background:var(--panel);border:1px solid #1f2937;border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .muted{color:var(--muted)}
+    .btn{padding:8px 12px;border:1px solid #334155;border-radius:10px;background:#0b1220;color:#e5e7eb;cursor:pointer}
+    .btn:hover{filter:brightness(1.1)}
+    .btn.acc{border-color:#14532d;background:#052e16}
+    .btn.warn{border-color:#7c5300;background:#2a2200}
+    .btn.err{border-color:#7f1d1d;background:#2a0b0b}
+    .pill{display:inline-block;padding:2px 8px;border:1px solid #334155;border-radius:999px;font-size:12px}
+    table{width:100%;border-collapse: collapse}
+    th,td{padding:10px;border-bottom:1px solid #243145}
+    th{text-align:left;color:#cbd5e1}
+    #video{width:100%;max-height:60vh;border-radius:14px;border:1px solid #23314a;background:#000}
+    #status{font-weight:600;margin-top:8px}
+    #qrGallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+    .qrCard{border:1px solid #243145;border-radius:12px;padding:10px;background:#0b1220}
+    input,select,textarea{background:#0b1220;border:1px solid #334155;border-radius:10px;color:var(--text);padding:8px;}
+    label{display:inline-flex;flex-direction:column;gap:6px;margin:6px 10px 6px 0}
+    .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .hide{display:none}
+    .ok{color:var(--accent)}.warnText{color:var(--warn)}.errText{color:var(--err)}
+    footer{opacity:.7;padding:40px 0;text-align:center}
+    a{color:#93c5fd}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="row" style="justify-content:space-between">
+        <h1>Asistencia con QR · Página única</h1>
+        <div class="row">
+          <button class="btn" id="btnBackup">⬇️ Descargar respaldo (.json)</button>
+          <input class="hide" type="file" id="restoreFile" accept="application/json" />
+          <button class="btn" id="btnRestore">🔁 Restaurar datos</button>
+        </div>
+      </div>
+      <nav role="tablist" aria-label="Secciones">
+        <button class="tab" role="tab" aria-selected="true" data-tab="scan">Escanear</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="dashboard">Dashboard</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="export">Exportar</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="gen">Generar QRs</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="ayuda">Ayuda</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" style="padding-top:16px">
+    <!-- SCAN -->
+    <section id="tab-scan" class="grid" role="tabpanel" aria-labelledby="scan">
+      <div class="card">
+        <h3 style="margin-top:0">Escaneo con cámara</h3>
+        <video id="video" playsinline muted></video>
+        <div class="row" style="margin-top:10px">
+          <button class="btn acc" id="startCam">▶️ Iniciar cámara</button>
+          <button class="btn" id="stopCam">⏹️ Detener</button>
+          <span id="status" class="muted">Listo para iniciar. Se requiere HTTPS para acceso a cámara.</span>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <input type="file" id="file" accept="image/*">
+          <span class="muted">O sube una foto con el QR</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Asistencias de hoy</h3>
+        <div id="todayDate" class="muted"></div>
+        <div id="todaySummary" class="muted" style="margin:8px 0"></div>
+        <table id="todayTable">
+          <thead><tr><th>Hora</th><th>Alumno</th><th>Grupo</th><th>ID</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard" class="grid hide" role="tabpanel" aria-labelledby="dashboard">
+      <div class="card">
+        <h3 style="margin-top:0">Histórico</h3>
+        <div class="row">
+          <label>Desde <input type="date" id="fromDate"></label>
+          <label>Hasta <input type="date" id="toDate"></label>
+          <label>Grupo <input type="text" id="filterGrupo" placeholder="3A, 3B…"></label>
+          <button class="btn" id="btnFiltrar">Filtrar</button>
+          <button class="btn" id="btnLimpiar">Limpiar</button>
+        </div>
+        <table id="histTable" style="margin-top:8px">
+          <thead><tr><th>Fecha</th><th>Hora</th><th>Alumno</th><th>Grupo</th><th>ID</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Totales por grupo</h3>
+        <ul id="totalesGrupo" class="muted"></ul>
+      </div>
+    </section>
+
+    <!-- EXPORT -->
+    <section id="tab-export" class="grid hide" role="tabpanel" aria-labelledby="export">
+      <div class="card">
+        <h3 style="margin-top:0">Exportar CSV</h3>
+        <div class="row">
+          <label>Desde <input type="date" id="expFrom"></label>
+          <label>Hasta <input type="date" id="expTo"></label>
+          <button class="btn acc" id="btnCSV">Descargar CSV</button>
+        </div>
+        <p class="muted">El CSV incluye columnas: fecha, hora, id_alumno, nombre, grupo.</p>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Respaldo / Restaurar</h3>
+        <p class="muted">También puedes usar los botones de la barra superior para respaldo JSON completo.</p>
+      </div>
+    </section>
+
+    <!-- GENERAR QRS -->
+    <section id="tab-gen" class="grid hide" role="tabpanel" aria-labelledby="gen">
+      <div class="card">
+        <h3 style="margin-top:0">Generar QRs (local, sin servidor)</h3>
+        <p class="muted">Pega una lista CSV con encabezados <code>id_alumno,nombre,grupo</code> o usa el formulario.</p>
+        <textarea id="csvInput" rows="6" placeholder="id_alumno,nombre,grupo\nA001,María López,3A\nA002,Carlos Pérez,3A"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="btn acc" id="btnGenFromCSV">Generar desde CSV</button>
+          <button class="btn" id="btnGenClear">Limpiar</button>
+        </div>
+        <hr style="border-color:#243145">
+        <div class="row">
+          <label>ID <input id="gId" placeholder="A003"></label>
+          <label>Nombre <input id="gNom" placeholder="Ana Torres"></label>
+          <label>Grupo <input id="gGrp" placeholder="3B"></label>
+          <button class="btn" id="btnGenUno">Agregar</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">QRs generados</h3>
+        <div id="qrGallery"></div>
+      </div>
+    </section>
+
+    <!-- AYUDA -->
+    <section id="tab-ayuda" class="grid hide" role="tabpanel" aria-labelledby="ayuda">
+      <div class="card">
+        <h3 style="margin-top:0">Cómo usar esta página</h3>
+        <ol>
+          <li>Publícala en HTTPS (por ejemplo, <strong>Netlify Drop</strong> o <strong>GitHub Pages</strong>) para que el navegador permita la cámara.</li>
+          <li>Ve a <strong>Escanear</strong> → Inicia la cámara → muestra el QR del alumno. Se registra <em>una vez por día</em>.</li>
+          <li>En <strong>Dashboard</strong> filtra histórico y totales.</li>
+          <li>En <strong>Exportar</strong> descarga CSV por rango de fechas.</li>
+          <li>En <strong>Generar QRs</strong> crea los códigos para tus alumnos sin instalar nada.</li>
+        </ol>
+        <p class="muted">Los datos se guardan <strong>localmente en tu navegador</strong> (LocalStorage). Usa “Descargar respaldo” para salvar un .json y poder restaurarlo después.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap muted">Hecho para funcionar 100% del lado del cliente · No requiere servidor</footer>
+
+  <!-- Librerías: ZXing para leer, qrcodejs para generar -->
+  <script src="https://unpkg.com/@zxing/library@0.20.0"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    // ======= Utilidades de almacenamiento =======
+    const KEY = 'asistencias_v1';
+    const todayISO = () => new Date().toISOString().slice(0,10); // YYYY-MM-DD
+    const nowTime = () => new Date().toTimeString().slice(0,8); // HH:MM:SS
+
+    function loadAll(){
+      try{ return JSON.parse(localStorage.getItem(KEY)) || [] }catch{ return [] }
+    }
+    function saveAll(arr){ localStorage.setItem(KEY, JSON.stringify(arr)) }
+
+    function addAttendance(rec){
+      const arr = loadAll();
+      const fecha = todayISO();
+      // dedupe: mismo id_alumno + misma fecha
+      const exists = arr.find(r => r.id_alumno===rec.id_alumno && r.fecha===fecha);
+      if(exists){ return {ok:false, msg:`Ya estaba registrada hoy: ${rec.nombre}`}; }
+      const nuevo = {fecha, hora: nowTime(), ...rec};
+      arr.push(nuevo); saveAll(arr);
+      return {ok:true, msg:`Asistencia guardada: ${rec.nombre} (${rec.grupo})`};
+    }
+
+    function listToday(){
+      const arr = loadAll();
+      const f = todayISO();
+      return arr.filter(r => r.fecha===f).sort((a,b)=>a.hora.localeCompare(b.hora));
+    }
+
+    function listRange(f1,f2,grupo){
+      const arr = loadAll();
+      return arr.filter(r => (!f1 || r.fecha>=f1) && (!f2 || r.fecha<=f2) && (!grupo || r.grupo.toLowerCase().includes(grupo.toLowerCase())) )
+                .sort((a,b)=> (a.fecha+a.hora).localeCompare(b.fecha+b.hora));
+    }
+
+    function groupTotals(records){
+      const map = new Map();
+      for(const r of records){ map.set(r.grupo, (map.get(r.grupo)||0)+1) }
+      return [...map.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+    }
+
+    function toCSV(records){
+      const head = ['fecha','hora','id_alumno','nombre','grupo'];
+      const rows = records.map(r=> [r.fecha,r.hora,wrap(r.id_alumno),wrap(r.nombre),wrap(r.grupo)].join(','));
+      return head.join(',') + "\n" + rows.join('\n');
+      function wrap(v){
+        const s = String(v).replaceAll('"','""');
+        return s.includes(',')? '"'+s+'"' : s
+      }
+    }
+
+    function download(filename, content, type='text/plain'){
+      const blob = new Blob([content], {type});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename; a.click();
+      setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+    }
+
+    // ======= Tabs =======
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(t=> t.addEventListener('click', ()=>{
+      tabs.forEach(x=> x.setAttribute('aria-selected','false'));
+      t.setAttribute('aria-selected','true');
+      document.querySelectorAll('main section').forEach(s=> s.classList.add('hide'));
+      document.getElementById('tab-'+t.dataset.tab).classList.remove('hide');
+      if(t.dataset.tab==='scan'){ renderToday() }
+    }));
+
+    // ======= Escaneo con cámara (ZXing) =======
+    const video = document.getElementById('video');
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startCam');
+    const stopBtn = document.getElementById('stopCam');
+    const fileInput = document.getElementById('file');
+
+    let codeReader = null;
+    let currentStream = null;
+    let scanning = false;
+
+    async function startCamera(){
+      try{
+        if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+        const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+        const back = devices.find(d=>/back|trás|rear|environment/i.test(d.label))?.deviceId || devices[0]?.deviceId;
+        if(!back){ statusEl.innerHTML = '⚠️ No hay cámaras disponibles'; return }
+        scanning = true;
+        statusEl.textContent = 'Abriendo cámara…';
+        await codeReader.decodeFromVideoDevice(back, video, (res, err, controls)=>{
+          if(res){
+            onQRCode(res.getText());
+          }
+          if(err && !(err instanceof ZXing.NotFoundException)){
+            console.warn(err);
+          }
+        });
+      }catch(e){
+        console.error(e);
+        statusEl.innerHTML = '⚠️ No se pudo acceder a la cámara. Asegúrate de usar HTTPS (o prueba subir una imagen).';
+      }
+    }
+
+    async function stopCamera(){
+      try{
+        scanning = false;
+        if(codeReader){ codeReader.reset(); }
+        if(video.srcObject){
+          video.srcObject.getTracks().forEach(t=> t.stop());
+          video.srcObject = null;
+        }
+        statusEl.textContent = 'Cámara detenida.';
+      }catch(e){ console.error(e) }
+    }
+
+    startBtn.addEventListener('click', startCamera);
+    stopBtn.addEventListener('click', stopCamera);
+
+    // Escanear desde imagen subida
+    fileInput.addEventListener('change', async (ev)=>{
+      const file = ev.target.files?.[0]; if(!file) return;
+      const url = URL.createObjectURL(file);
+      try{
+        if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+        const res = await codeReader.decodeFromImageUrl(url);
+        if(res) onQRCode(res.getText());
+        else statusEl.innerHTML = '⚠️ No se detectó QR en la imagen';
+      }catch(e){ statusEl.innerHTML = '⚠️ Error al procesar imagen'; console.error(e) }
+      finally{ URL.revokeObjectURL(url) }
+    });
+
+    function onQRCode(text){
+      let payload;
+      try{ payload = JSON.parse(text) }catch{ note('QR inválido (no es JSON).','err'); return }
+      const need = ['id_alumno','nombre','grupo'];
+      if(!need.every(k=> payload[k])){ note('QR inválido (faltan campos).','err'); return }
+      const {ok,msg} = addAttendance({id_alumno:String(payload.id_alumno), nombre:String(payload.nombre), grupo:String(payload.grupo)});
+      note(msg, ok? 'ok' : 'warn');
+      renderToday();
+    }
+
+    function note(message, tone='ok'){
+      const map = {ok:'✅', warn:'🟡', err:'⚠️'};
+      statusEl.innerHTML = `<span class="${tone==='ok'?'ok':tone==='warn'?'warnText':'errText'}">${map[tone]} ${message}</span>`;
+    }
+
+    // ======= Render: Hoy y Dashboard =======
+    const todayDateEl = document.getElementById('todayDate');
+    const todaySummaryEl = document.getElementById('todaySummary');
+    const todayTbody = document.querySelector('#todayTable tbody');
+
+    function renderToday(){
+      const items = listToday();
+      todayDateEl.textContent = `Hoy: ${todayISO()}`;
+      const totales = groupTotals(items);
+      todaySummaryEl.textContent = totales.length? `Por grupo: `+ totales.map(([g,c])=>`${g}: ${c}`).join(' · ') : 'Sin asistencias hoy.';
+      todayTbody.innerHTML = items.map(r=> `<tr><td>${r.hora}</td><td>${esc(r.nombre)}</td><td><span class="pill">${esc(r.grupo)}</span></td><td class="muted">${esc(r.id_alumno)}</td></tr>`).join('');
+    }
+
+    // Dashboard filtros
+    const fromDate = document.getElementById('fromDate');
+    const toDate = document.getElementById('toDate');
+    const filterGrupo = document.getElementById('filterGrupo');
+    const btnFiltrar = document.getElementById('btnFiltrar');
+    const btnLimpiar = document.getElementById('btnLimpiar');
+    const histTbody = document.querySelector('#histTable tbody');
+    const totalesUl = document.getElementById('totalesGrupo');
+
+    function renderHist(){
+      const rows = listRange(fromDate.value, toDate.value, filterGrupo.value);
+      histTbody.innerHTML = rows.map(r=> `<tr><td>${r.fecha}</td><td>${r.hora}</td><td>${esc(r.nombre)}</td><td>${esc(r.grupo)}</td><td class="muted">${esc(r.id_alumno)}</td></tr>`).join('');
+      const tot = groupTotals(rows);
+      totalesUl.innerHTML = tot.length? tot.map(([g,c])=> `<li>${esc(g)}: <strong>${c}</strong></li>`).join('') : '<li class="muted">Sin datos</li>';
+    }
+
+    btnFiltrar.addEventListener('click', renderHist);
+    btnLimpiar.addEventListener('click', ()=>{fromDate.value='';toDate.value='';filterGrupo.value='';renderHist()});
+
+    // ======= Exportar CSV =======
+    document.getElementById('btnCSV').addEventListener('click', ()=>{
+      const f1 = document.getElementById('expFrom').value;
+      const f2 = document.getElementById('expTo').value;
+      const rows = listRange(f1,f2);
+      const csv = toCSV(rows);
+      const name = f1&&f2? `reporte_${f1}_${f2}.csv` : `reporte_completo.csv`;
+      download(name, csv, 'text/csv');
+    });
+
+    // ======= Backup / Restore =======
+    document.getElementById('btnBackup').addEventListener('click', ()=>{
+      const json = JSON.stringify(loadAll(), null, 2);
+      download(`asistencias_backup_${todayISO()}.json`, json, 'application/json');
+    });
+
+    const restoreBtn = document.getElementById('btnRestore');
+    const restoreFile = document.getElementById('restoreFile');
+    restoreBtn.addEventListener('click', ()=> restoreFile.click());
+    restoreFile.addEventListener('change', async (ev)=>{
+      const f = ev.target.files?.[0]; if(!f) return;
+      const text = await f.text();
+      try{
+        const arr = JSON.parse(text);
+        if(!Array.isArray(arr)) throw new Error('Formato inválido');
+        saveAll(arr);
+        alert('Datos restaurados correctamente');
+        renderToday(); renderHist();
+      }catch(e){ alert('No se pudo restaurar: '+e.message) }
+      finally{ ev.target.value = '' }
+    });
+
+    // ======= Generar QRs =======
+    const csvInput = document.getElementById('csvInput');
+    const btnGenFromCSV = document.getElementById('btnGenFromCSV');
+    const btnGenClear = document.getElementById('btnGenClear');
+    const btnGenUno = document.getElementById('btnGenUno');
+    const gId = document.getElementById('gId');
+    const gNom = document.getElementById('gNom');
+    const gGrp = document.getElementById('gGrp');
+    const qrGallery = document.getElementById('qrGallery');
+
+    btnGenFromCSV.addEventListener('click', ()=>{
+      const rows = parseCSV(csvInput.value.trim());
+      const items = rows.filter(r=>r.id_alumno && r.nombre && r.grupo);
+      renderQRs(items);
+    });
+    btnGenClear.addEventListener('click', ()=>{ qrGallery.innerHTML=''; csvInput.value=''; gId.value=''; gNom.value=''; gGrp.value=''; });
+    btnGenUno.addEventListener('click', ()=>{
+      const item = {id_alumno:gId.value.trim(), nombre:gNom.value.trim(), grupo:gGrp.value.trim()};
+      if(!(item.id_alumno && item.nombre && item.grupo)){ alert('Completa ID, Nombre y Grupo'); return }
+      renderQRs([item], true);
+    });
+
+    function renderQRs(items, append=false){
+      if(!append) qrGallery.innerHTML='';
+      for(const it of items){
+        const card = document.createElement('div'); card.className='qrCard';
+        const title = document.createElement('div'); title.textContent = `${it.nombre} (${it.grupo})`; title.style.marginBottom='6px';
+        const box = document.createElement('div'); box.style.width='180px'; box.style.height='180px'; box.style.margin='0 auto 8px';
+        const json = JSON.stringify({id_alumno:it.id_alumno, nombre:it.nombre, grupo:it.grupo});
+        new QRCode(box, {text: json, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M});
+        const meta = document.createElement('div'); meta.className='muted'; meta.textContent = `ID: ${it.id_alumno}`;
+        const dl = document.createElement('button'); dl.className='btn'; dl.textContent='Descargar PNG'; dl.addEventListener('click', ()=> downloadQR(box, `${it.id_alumno}.png`) );
+        card.append(title, box, meta, dl); qrGallery.append(card);
+      }
+    }
+
+    function downloadQR(container, filename){
+      const img = container.querySelector('img') || container.querySelector('canvas');
+      let dataURL;
+      if(img.tagName==='IMG'){ dataURL = img.src } else { dataURL = img.toDataURL('image/png') }
+      const a = document.createElement('a'); a.href=dataURL; a.download=filename; a.click();
+    }
+
+    function parseCSV(text){
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      if(!lines.length) return [];
+      const head = lines[0].split(',').map(s=> s.trim().toLowerCase());
+      const idx = {
+        id: head.indexOf('id_alumno'),
+        nom: head.indexOf('nombre'),
+        grp: head.indexOf('grupo')
+      };
+      const out=[];
+      for(let i=1;i<lines.length;i++){
+        const cols = splitCSVLine(lines[i]);
+        out.push({ id_alumno: cols[idx.id]?.trim(), nombre: cols[idx.nom]?.trim(), grupo: cols[idx.grp]?.trim() });
+      }
+      return out;
+    }
+
+    function splitCSVLine(line){
+      const res=[]; let cur=''; let inQ=false; for(let i=0;i<line.length;i++){
+        const ch=line[i];
+        if(ch==='"'){
+          if(inQ && line[i+1]==='"'){ cur+='"'; i++; }
+          else inQ = !inQ;
+        } else if(ch===',' && !inQ){ res.push(cur); cur=''; }
+        else cur+=ch;
+      }
+      res.push(cur); return res;
+    }
+
+    // ======= Helpers =======
+    const esc = s => String(s).replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+
+    // Inicial
+    renderToday(); renderHist();
+  </script>
+</body>
+</html>
