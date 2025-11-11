@@ -30,7 +30,7 @@
     table{width:100%;border-collapse: collapse}
     th,td{padding:10px;border-bottom:1px solid #243145}
     th{text-align:left;color:#cbd5e1}
-    #reader{width:100%;max-width:680px;border-radius:14px;border:1px solid #23314a;background:#000;min-height:260px}
+    #reader{width:100%;max-width:680px;border-radius:14px;border:1px solid #23314a;background:#000;min-height:300px}
     #status{font-weight:600;margin-top:8px}
     #qrGallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
     .qrCard{border:1px solid #243145;border-radius:12px;padding:10px;background:#0b1220}
@@ -41,6 +41,7 @@
     .ok{color:var(--accent)}.warnText{color:var(--warn)}.errText{color:var(--err)}
     footer{opacity:.7;padding:40px 0;text-align:center}
     a{color:#93c5fd}
+    .banner{background:#2a1200;border:1px solid #7c5300;color:#fbbf24;padding:8px 12px;border-radius:10px;margin:8px 0}
   </style>
 </head>
 <body>
@@ -54,6 +55,7 @@
           <button class="btn" id="btnRestore">🔁 Restaurar datos</button>
         </div>
       </div>
+      <div id="httpsBanner" class="banner hide">Para usar la cámara necesitas abrir esta página en <strong>HTTPS</strong> o en <code>http://localhost</code>. La cámara está deshabilitada por el navegador.</div>
       <nav role="tablist" aria-label="Secciones">
         <button class="tab" role="tab" aria-selected="true" data-tab="scan">Escanear</button>
         <button class="tab" role="tab" aria-selected="false" data-tab="dashboard">Dashboard</button>
@@ -77,10 +79,10 @@
           <label style="min-width:220px">Cámara
             <select id="cameraSelect"></select>
           </label>
-          <span id="status" class="muted">Listo para iniciar. Se requiere HTTPS para acceso a cámara.</span>
+          <span id="status" class="muted">Listo para iniciar.</span>
         </div>
         <div class="row" style="margin-top:10px">
-          <input type="file" id="file" accept="image/*">
+          <input type="file" id="file" accept="image/*" capture="environment">
           <span class="muted">O sube una foto con el QR</span>
         </div>
         <div class="row" style="margin-top:10px">
@@ -167,7 +169,7 @@
       <div class="card">
         <h3 style="margin-top:0">Cómo usar esta página</h3>
         <ol>
-          <li>Publícala en HTTPS (por ejemplo, <strong>Netlify Drop</strong> o <strong>GitHub Pages</strong>) para que el navegador permita la cámara.</li>
+          <li>Abre esta página en <strong>HTTPS</strong> (o <code>http://localhost</code>). En <code>file://</code> la cámara no funciona por seguridad.</li>
           <li>Ve a <strong>Escanear</strong> → Inicia la cámara → muestra el QR del alumno. Se registra <em>una vez por día</em>.</li>
           <li>En <strong>Dashboard</strong> filtra histórico y totales.</li>
           <li>En <strong>Exportar</strong> descarga CSV por rango de fechas.</li>
@@ -181,23 +183,25 @@
   <footer class="wrap muted">Hecho para funcionar 100% del lado del cliente · No requiere servidor</footer>
 
   <!-- Librerías: html5-qrcode para leer, qrcodejs para generar -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
+    // ======= Utilidades de entorno =======
+    const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    const httpsBanner = document.getElementById('httpsBanner');
+    if(!isSecure) httpsBanner.classList.remove('hide');
+
     // ======= Utilidades de almacenamiento =======
     const KEY = 'asistencias_v1';
     const todayISO = () => new Date().toISOString().slice(0,10); // YYYY-MM-DD
     const nowTime = () => new Date().toTimeString().slice(0,8); // HH:MM:SS
 
-    function loadAll(){
-      try{ return JSON.parse(localStorage.getItem(KEY)) || [] }catch{ return [] }
-    }
+    function loadAll(){ try{ return JSON.parse(localStorage.getItem(KEY)) || [] }catch{ return [] } }
     function saveAll(arr){ localStorage.setItem(KEY, JSON.stringify(arr)) }
 
     function addAttendance(rec){
       const arr = loadAll();
       const fecha = todayISO();
-      // dedupe: mismo id_alumno + misma fecha
       const exists = arr.find(r => r.id_alumno===rec.id_alumno && r.fecha===fecha);
       if(exists){ return {ok:false, msg:`Ya estaba registrada hoy: ${rec.nombre}`}; }
       const nuevo = {fecha, hora: nowTime(), ...rec};
@@ -205,41 +209,14 @@
       return {ok:true, msg:`Asistencia guardada: ${rec.nombre} (${rec.grupo})`};
     }
 
-    function listToday(){
-      const arr = loadAll();
-      const f = todayISO();
-      return arr.filter(r => r.fecha===f).sort((a,b)=>a.hora.localeCompare(b.hora));
-    }
-
+    function listToday(){ const f = todayISO(); return loadAll().filter(r=>r.fecha===f).sort((a,b)=>a.hora.localeCompare(b.hora)); }
     function listRange(f1,f2,grupo){
-      const arr = loadAll();
-      return arr.filter(r => (!f1 || r.fecha>=f1) && (!f2 || r.fecha<=f2) && (!grupo || r.grupo.toLowerCase().includes(grupo.toLowerCase())) )
-                .sort((a,b)=> (a.fecha+a.hora).localeCompare(b.fecha+b.hora));
+      return loadAll().filter(r => (!f1 || r.fecha>=f1) && (!f2 || r.fecha<=f2) && (!grupo || r.grupo.toLowerCase().includes(grupo.toLowerCase())) )
+                       .sort((a,b)=> (a.fecha+a.hora).localeCompare(b.fecha+b.hora));
     }
-
-    function groupTotals(records){
-      const map = new Map();
-      for(const r of records){ map.set(r.grupo, (map.get(r.grupo)||0)+1) }
-      return [...map.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
-    }
-
-    function toCSV(records){
-      const head = ['fecha','hora','id_alumno','nombre','grupo'];
-      const rows = records.map(r=> [r.fecha,r.hora,wrap(r.id_alumno),wrap(r.nombre),wrap(r.grupo)].join(','));
-      return head.join(',') + "\n" + rows.join('\n');
-      function wrap(v){
-        const s = String(v).replaceAll('"','""');
-        return s.includes(',')? '"'+s+'"' : s
-      }
-    }
-
-    function download(filename, content, type='text/plain'){
-      const blob = new Blob([content], {type});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename; a.click();
-      setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
-    }
+    function groupTotals(records){ const m=new Map(); for(const r of records){ m.set(r.grupo,(m.get(r.grupo)||0)+1) } return [...m.entries()].sort((a,b)=>a[0].localeCompare(b[0])); }
+    function toCSV(records){ const head=['fecha','hora','id_alumno','nombre','grupo']; const rows=records.map(r=>[r.fecha,r.hora,wrap(r.id_alumno),wrap(r.nombre),wrap(r.grupo)].join(',')); return head.join(',')+"\n"+rows.join('\n'); function wrap(v){ const s=String(v).replaceAll('"','""'); return s.includes(',')? '"'+s+'"':s } }
+    function download(filename, content, type='text/plain'){ const blob=new Blob([content],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
 
     // ======= Tabs =======
     const tabs = document.querySelectorAll('.tab');
@@ -266,43 +243,49 @@
         const devices = await Html5Qrcode.getCameras();
         cameraSelect.innerHTML = '';
         if(!devices.length){ cameraSelect.innerHTML = '<option value="">(Sin cámaras)</option>'; return }
-        for(const d of devices){
-          const opt = document.createElement('option');
-          opt.value = d.id; opt.textContent = d.label || d.id; cameraSelect.append(opt);
-        }
-      }catch(e){ console.error(e); cameraSelect.innerHTML = '<option value="">(Error listando cámaras)</option>'; }
+        for(const d of devices){ const opt=document.createElement('option'); opt.value=d.id; opt.textContent=d.label||d.id; cameraSelect.append(opt); }
+      }catch(e){ console.error('listCameras:', e); cameraSelect.innerHTML = '<option value="">(Error listando cámaras)</option>'; }
     }
 
     async function startCamera(){
       if(running) return;
+      if(!isSecure){ statusEl.innerHTML='⚠️ Abre en HTTPS o localhost para usar la cámara.'; return }
       try{
-        if(!html5QrCode){ html5QrCode = new Html5Qrcode('reader', {formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]}); }
+        if(!html5QrCode){ html5QrCode = new Html5Qrcode('reader', { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] }); }
+        statusEl.textContent = 'Inicializando cámara…';
+
+        // Intento A: facingMode (no requiere enumerar)
+        try{
+          await html5QrCode.start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 260, height: 260 } },
+            (decodedText)=> onQRCode(decodedText),
+            ()=>{}
+          );
+          running = true; statusEl.textContent = 'Cámara iniciada (trasera si disponible).';
+          await populateCameras(); // para permitir cambiar luego
+          return;
+        }catch(eA){ console.warn('Fallback a lista de cámaras:', eA); }
+
+        // Intento B: usar dispositivo seleccionado / primero
         await populateCameras();
-        const camId = cameraSelect.value || (await Html5Qrcode.getCameras())[0]?.id;
-        if(!camId){ statusEl.innerHTML = '⚠️ No hay cámaras disponibles o falta HTTPS.'; return }
-        running = true;
-        statusEl.textContent = 'Cámara iniciada. Escaneando…';
+        const list = cameraSelect.options; const camId = (list.length && list[0].value) ? (cameraSelect.value || list[0].value) : null;
+        if(!camId){ statusEl.innerHTML='⚠️ No hay cámaras disponibles.'; return }
         await html5QrCode.start(
           camId,
           { fps: 10, qrbox: { width: 260, height: 260 } },
-          (decodedText, decodedResult)=> onQRCode(decodedText),
-          (errMsg)=>{ /* silencioso para no saturar UI */ }
+          (decodedText)=> onQRCode(decodedText),
+          ()=>{}
         );
-      }catch(e){
-        console.error(e);
-        statusEl.innerHTML = '⚠️ No se pudo acceder a la cámara. Usa HTTPS o prueba con la subida de imagen.';
-      }
+        running = true; statusEl.textContent = 'Cámara iniciada.';
+      }catch(e){ console.error('startCamera:', e); statusEl.innerHTML = '⚠️ No se pudo acceder a la cámara. Revisa permisos del navegador.'; }
     }
 
     async function stopCamera(){
       try{
-        if(html5QrCode && running){
-          await html5QrCode.stop();
-          await html5QrCode.clear();
-        }
-      }catch(e){ console.warn(e) }
-      running = false;
-      statusEl.textContent = 'Cámara detenida.';
+        if(html5QrCode && running){ await html5QrCode.stop(); await html5QrCode.clear(); }
+      }catch(e){ console.warn('stopCamera:', e) }
+      running = false; statusEl.textContent = 'Cámara detenida.';
     }
 
     startBtn.addEventListener('click', startCamera);
@@ -316,18 +299,15 @@
         const result = await fileQr.scanFileV2(file, true);
         if(result && result.decodedText){ onQRCode(result.decodedText) }
         await fileQr.clear();
-      }catch(e){ statusEl.innerHTML = '⚠️ No se detectó QR en la imagen'; console.error(e) }
+      }catch(e){ statusEl.innerHTML = '⚠️ No se detectó QR en la imagen'; console.error('scanFile:', e) }
       finally{ ev.target.value = '' }
     });
 
     function onQRCode(text){
-      let payload;
-      try{ payload = JSON.parse(text) }catch{ note('QR inválido (no es JSON).','err'); return }
-      const need = ['id_alumno','nombre','grupo'];
-      if(!need.every(k=> payload[k])){ note('QR inválido (faltan campos).','err'); return }
+      let payload; try{ payload = JSON.parse(text) }catch{ note('QR inválido (no es JSON).','err'); return }
+      const need=['id_alumno','nombre','grupo']; if(!need.every(k=> payload[k])){ note('QR inválido (faltan campos).','err'); return }
       const {ok,msg} = addAttendance({id_alumno:String(payload.id_alumno), nombre:String(payload.nombre), grupo:String(payload.grupo)});
-      note(msg, ok? 'ok' : 'warn');
-      renderToday();
+      note(msg, ok? 'ok' : 'warn'); renderToday();
     }
 
     function note(message, tone='ok'){
@@ -382,20 +362,14 @@
       const json = JSON.stringify(loadAll(), null, 2);
       download(`asistencias_backup_${todayISO()}.json`, json, 'application/json');
     });
-
     const restoreBtn = document.getElementById('btnRestore');
     const restoreFile = document.getElementById('restoreFile');
     restoreBtn.addEventListener('click', ()=> restoreFile.click());
     restoreFile.addEventListener('change', async (ev)=>{
       const f = ev.target.files?.[0]; if(!f) return;
       const text = await f.text();
-      try{
-        const arr = JSON.parse(text);
-        if(!Array.isArray(arr)) throw new Error('Formato inválido');
-        saveAll(arr);
-        alert('Datos restaurados correctamente');
-        renderToday(); renderHist();
-      }catch(e){ alert('No se pudo restaurar: '+e.message) }
+      try{ const arr = JSON.parse(text); if(!Array.isArray(arr)) throw new Error('Formato inválido'); saveAll(arr); alert('Datos restaurados correctamente'); renderToday(); renderHist(); }
+      catch(e){ alert('No se pudo restaurar: '+e.message) }
       finally{ ev.target.value = '' }
     });
 
@@ -437,44 +411,29 @@
 
     function downloadQR(container, filename){
       const img = container.querySelector('img') || container.querySelector('canvas');
-      let dataURL;
-      if(img.tagName==='IMG'){ dataURL = img.src } else { dataURL = img.toDataURL('image/png') }
-      const a = document.createElement('a'); a.href=dataURL; a.download=filename; a.click();
+      let dataURL = img.tagName==='IMG' ? img.src : img.toDataURL('image/png');
+      const a=document.createElement('a'); a.href=dataURL; a.download=filename; a.click();
     }
 
     function parseCSV(text){
-      const lines = text.split(/\r?\n/).filter(Boolean);
-      if(!lines.length) return [];
+      const lines = text.split(/\r?\n/).filter(Boolean); if(!lines.length) return [];
       const head = lines[0].split(',').map(s=> s.trim().toLowerCase());
       const idx = { id: head.indexOf('id_alumno'), nom: head.indexOf('nombre'), grp: head.indexOf('grupo') };
-      const out=[];
-      for(let i=1;i<lines.length;i++){
-        const cols = splitCSVLine(lines[i]);
-        out.push({ id_alumno: cols[idx.id]?.trim(), nombre: cols[idx.nom]?.trim(), grupo: cols[idx.grp]?.trim() });
-      }
+      const out=[]; for(let i=1;i<lines.length;i++){ const cols = splitCSVLine(lines[i]); out.push({ id_alumno: cols[idx.id]?.trim(), nombre: cols[idx.nom]?.trim(), grupo: cols[idx.grp]?.trim() }); }
       return out;
     }
 
     function splitCSVLine(line){
       const res=[]; let cur=''; let inQ=false; for(let i=0;i<line.length;i++){
-        const ch=line[i];
-        if(ch==='"'){
-          if(inQ && line[i+1]==='"'){ cur+='"'; i++; }
-          else inQ = !inQ;
-        } else if(ch===',' && !inQ){ res.push(cur); cur=''; }
-        else cur+=ch;
+        const ch=line[i]; if(ch==='"'){ if(inQ && line[i+1]==='"'){ cur+='"'; i++; } else inQ = !inQ; }
+        else if(ch===',' && !inQ){ res.push(cur); cur=''; } else cur+=ch;
       }
       res.push(cur); return res;
     }
 
     // ======= Tests (casos de prueba) =======
-    document.getElementById('btnTestOk').addEventListener('click', ()=>{
-      const sample = { id_alumno: 'A001', nombre: 'María López', grupo: '3A' };
-      onQRCode(JSON.stringify(sample));
-    });
-    document.getElementById('btnTestBad').addEventListener('click', ()=>{
-      onQRCode('{"foo":1}');
-    });
+    document.getElementById('btnTestOk').addEventListener('click', ()=>{ onQRCode(JSON.stringify({ id_alumno:'A001', nombre:'María López', grupo:'3A' })); });
+    document.getElementById('btnTestBad').addEventListener('click', ()=>{ onQRCode('{"foo":1}'); });
 
     // ======= Helpers =======
     const esc = s => String(s).replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
